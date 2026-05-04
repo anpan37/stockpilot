@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  stockpilot:
+    build: .
+    ports:
+      - "8848:8848"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
