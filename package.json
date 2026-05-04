@@ -1,14 +1,17 @@
 {
   "name": "stockpilot",
   "version": "1.0.0",
+  "description": "StockPilot Inventory Management System",
   "main": "server.js",
-  "description": "Inventory Management App",
   "scripts": {
     "start": "node server.js"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
-    "better-sqlite3": "^9.0.0",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "better-sqlite3": "^9.6.0"
   }
 }
