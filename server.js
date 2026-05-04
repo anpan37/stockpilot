@@ -3,120 +3,79 @@ const cors = require("cors");
 const Database = require("better-sqlite3");
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database
-const db = new Database("stockpilot.db");
+// IMPORTANT FOR RENDER
+const PORT = process.env.PORT || 3001;
 
-// Create table
+// DB
+const db = new Database("stock.db");
+
+// TABLES
 db.prepare(`
 CREATE TABLE IF NOT EXISTS items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT UNIQUE,
-  fullStock INTEGER,
-  currentStock INTEGER DEFAULT 0,
-  createdAt TEXT,
-  updatedAt TEXT
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    currentStock INTEGER DEFAULT 0,
+    fullStock INTEGER
 )
 `).run();
 
-// HEALTH CHECK
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
-});
+/* ---------------- API ---------------- */
 
-// GET ALL ITEMS
+// GET ITEMS
 app.get("/items", (req, res) => {
-  const items = db.prepare("SELECT * FROM items").all();
-  res.json(items);
+    const items = db.prepare("SELECT * FROM items").all();
+    res.json(items);
 });
 
-// CREATE ITEM
+// ADD ITEM
 app.post("/items", (req, res) => {
-  const { name, fullStock } = req.body;
+    const { name, fullStock } = req.body;
 
-  if (!name || !fullStock) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
+    db.prepare(`
+        INSERT INTO items (name, currentStock, fullStock)
+        VALUES (?, 0, ?)
+    `).run(name, fullStock);
 
-  try {
-    const stmt = db.prepare(`
-      INSERT INTO items (name, fullStock, currentStock, createdAt, updatedAt)
-      VALUES (?, ?, 0, datetime('now'), datetime('now'))
-    `);
-
-    stmt.run(name, fullStock);
-
-    res.json({ success: true });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json({ ok: true });
 });
 
-// UPDATE STOCK (+/-)
+// UPDATE STOCK
 app.patch("/items/:id", (req, res) => {
-  const { id } = req.params;
-  const { delta } = req.body;
+    const { delta } = req.body;
 
-  const item = db.prepare("SELECT * FROM items WHERE id = ?").get(id);
+    db.prepare(`
+        UPDATE items
+        SET currentStock = currentStock + ?
+        WHERE id = ?
+    `).run(delta, req.params.id);
 
-  if (!item) return res.status(404).json({ error: "Not found" });
-
-  let newStock = item.currentStock + delta;
-
-  if (newStock < 0) newStock = 0;
-  if (newStock > item.fullStock) newStock = item.fullStock;
-
-  db.prepare(`
-    UPDATE items
-    SET currentStock = ?, updatedAt = datetime('now')
-    WHERE id = ?
-  `).run(newStock, id);
-
-  res.json({ success: true });
+    res.json({ ok: true });
 });
 
 // DELETE ITEM
 app.delete("/items/:id", (req, res) => {
-  const { id } = req.params;
-
-  db.prepare("DELETE FROM items WHERE id = ?").run(id);
-
-  res.json({ success: true });
+    db.prepare("DELETE FROM items WHERE id = ?").run(req.params.id);
+    res.json({ ok: true });
 });
 
 // SUMMARY
 app.get("/summary", (req, res) => {
-  const items = db.prepare("SELECT * FROM items").all();
+    const items = db.prepare("SELECT * FROM items").all();
 
-  let total = items.length;
-  let full = 0;
-  let low = 0;
-  let totalMissing = 0;
+    const total = items.length;
+    const low = items.filter(i => i.currentStock < i.fullStock * 0.3).length;
+    const full = items.filter(i => i.currentStock >= i.fullStock).length;
 
-  items.forEach(i => {
-    const percent = i.currentStock / i.fullStock;
+    const fillRate = total === 0 ? 0 :
+        Math.round((items.reduce((a, b) => a + b.currentStock, 0) /
+        items.reduce((a, b) => a + b.fullStock, 0)) * 100);
 
-    if (percent >= 1) full++;
-    else if (percent < 0.4) low++;
-
-    totalMissing += (i.fullStock - i.currentStock);
-  });
-
-  res.json({
-    total,
-    full,
-    low,
-    totalMissing
-  });
+    res.json({ total, low, full, fillRate });
 });
 
-// START SERVER
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running on port", PORT);
+    console.log("Server running on port", PORT);
 });
