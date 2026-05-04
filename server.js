@@ -1,155 +1,122 @@
-const express = require('express');
-const cors = require('cors');
-const Database = require('better-sqlite3');
-const path = require('path');
+const express = require("express");
+const cors = require("cors");
+const Database = require("better-sqlite3");
 
 const app = express();
-const PORT = 8848;
+const PORT = process.env.PORT || 3001;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-/* ---------------- STATIC FRONTEND ---------------- */
-app.use(express.static(__dirname));
+// Database
+const db = new Database("stockpilot.db");
 
-/* ---------------- DATABASE ---------------- */
-const db = new Database('./data.db');
-
+// Create table
 db.prepare(`
 CREATE TABLE IF NOT EXISTS items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE,
-    fullStock INTEGER CHECK(fullStock BETWEEN 1 AND 50),
-    currentStock INTEGER,
-    createdAt TEXT,
-    updatedAt TEXT
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE,
+  fullStock INTEGER,
+  currentStock INTEGER DEFAULT 0,
+  createdAt TEXT,
+  updatedAt TEXT
 )
 `).run();
 
-/* ---------------- HELPER ---------------- */
-function calculate(item) {
-    const percentage = Math.round((item.currentStock / item.fullStock) * 100);
-    const toAdd = item.fullStock - item.currentStock;
-
-    let status = 'OK';
-    if (percentage === 100) status = 'FULL';
-    else if (percentage < 40) status = 'LOW';
-
-    return { ...item, percentage, toAdd, status };
-}
-
-/* ---------------- ROUTES ---------------- */
-
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+// HEALTH CHECK
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
-/* GET all items */
-app.get('/items', (req, res) => {
-    try {
-        const items = db.prepare("SELECT * FROM items").all();
-        res.json(items.map(calculate));
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// GET ALL ITEMS
+app.get("/items", (req, res) => {
+  const items = db.prepare("SELECT * FROM items").all();
+  res.json(items);
 });
 
-/* CREATE or UPDATE item */
-app.post('/items', (req, res) => {
-    try {
-        const { name, fullStock, currentStock } = req.body;
+// CREATE ITEM
+app.post("/items", (req, res) => {
+  const { name, fullStock } = req.body;
 
-        if (!name || !fullStock) {
-            return res.status(400).json({ error: 'Invalid input' });
-        }
+  if (!name || !fullStock) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
 
-        const now = new Date().toISOString();
-        const existing = db.prepare("SELECT * FROM items WHERE name=?").get(name);
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO items (name, fullStock, currentStock, createdAt, updatedAt)
+      VALUES (?, ?, 0, datetime('now'), datetime('now'))
+    `);
 
-        if (existing) {
-            db.prepare(`
-                UPDATE items 
-                SET fullStock=?, currentStock=?, updatedAt=? 
-                WHERE name=?
-            `).run(fullStock, currentStock ?? existing.currentStock, now, name);
-        } else {
-            db.prepare(`
-                INSERT INTO items (name, fullStock, currentStock, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, ?)
-            `).run(name, fullStock, currentStock || 0, now, now);
-        }
+    stmt.run(name, fullStock);
 
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-/* UPDATE stock */
-app.patch('/items/:id', (req, res) => {
-    try {
-        const { id } = req.params;
-        const { delta, name, fullStock } = req.body;
+// UPDATE STOCK (+/-)
+app.patch("/items/:id", (req, res) => {
+  const { id } = req.params;
+  const { delta } = req.body;
 
-        const item = db.prepare("SELECT * FROM items WHERE id=?").get(id);
-        if (!item) return res.status(404).json({ error: 'Not found' });
+  const item = db.prepare("SELECT * FROM items WHERE id = ?").get(id);
 
-        let newStock = item.currentStock;
+  if (!item) return res.status(404).json({ error: "Not found" });
 
-        if (delta !== undefined) {
-            newStock = Math.max(0, Math.min(item.fullStock, item.currentStock + delta));
-        }
+  let newStock = item.currentStock + delta;
 
-        const now = new Date().toISOString();
+  if (newStock < 0) newStock = 0;
+  if (newStock > item.fullStock) newStock = item.fullStock;
 
-        db.prepare(`
-            UPDATE items SET 
-                currentStock=?,
-                name=COALESCE(?, name),
-                fullStock=COALESCE(?, fullStock),
-                updatedAt=?
-            WHERE id=?
-        `).run(newStock, name, fullStock, now, id);
+  db.prepare(`
+    UPDATE items
+    SET currentStock = ?, updatedAt = datetime('now')
+    WHERE id = ?
+  `).run(newStock, id);
 
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+  res.json({ success: true });
 });
 
-/* DELETE item */
-app.delete('/items/:id', (req, res) => {
-    try {
-        db.prepare("DELETE FROM items WHERE id=?").run(req.params.id);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+// DELETE ITEM
+app.delete("/items/:id", (req, res) => {
+  const { id } = req.params;
+
+  db.prepare("DELETE FROM items WHERE id = ?").run(id);
+
+  res.json({ success: true });
 });
 
-/* SUMMARY */
-app.get('/summary', (req, res) => {
-    try {
-        const items = db.prepare("SELECT * FROM items").all().map(calculate);
+// SUMMARY
+app.get("/summary", (req, res) => {
+  const items = db.prepare("SELECT * FROM items").all();
 
-        const total = items.length;
-        const full = items.filter(i => i.status === 'FULL').length;
-        const low = items.filter(i => i.status === 'LOW').length;
-        const ok = items.filter(i => i.status === 'OK').length;
+  let total = items.length;
+  let full = 0;
+  let low = 0;
+  let totalMissing = 0;
 
-        const missing = items.reduce((sum, i) => sum + i.toAdd, 0);
+  items.forEach(i => {
+    const percent = i.currentStock / i.fullStock;
 
-        const fillRate = total === 0
-            ? 0
-            : Math.round(items.reduce((s, i) => s + i.percentage, 0) / total);
+    if (percent >= 1) full++;
+    else if (percent < 0.4) low++;
 
-        res.json({ total, full, low, ok, missing, fillRate });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    totalMissing += (i.fullStock - i.currentStock);
+  });
+
+  res.json({
+    total,
+    full,
+    low,
+    totalMissing
+  });
 });
 
-/* ---------------- START SERVER ---------------- */
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`StockPilot running on http://0.0.0.0:${PORT}`);
+// START SERVER
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("Server running on port", PORT);
 });

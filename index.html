@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>StockPilot</title>
 
 <style>
@@ -10,35 +10,55 @@ body {
   font-family: system-ui;
   background:#0b1220;
   color:white;
+  -webkit-text-size-adjust: 100%;
+}
+
+.container {
+  padding:15px;
 }
 
 input, button {
-  padding:10px;
-  margin:5px;
-  border-radius:8px;
+  font-size:16px; /* prevents iOS zoom */
+  padding:12px;
+  margin:5px 0;
+  width:100%;
+  border-radius:10px;
   border:none;
+  box-sizing:border-box;
 }
 
 button {
   background:#3b82f6;
   color:white;
+  font-weight:bold;
 }
 
 .item {
   background:#1e293b;
-  margin:10px;
-  padding:10px;
-  border-radius:10px;
+  padding:12px;
+  margin:10px 0;
+  border-radius:12px;
+}
+
+.row {
+  display:flex;
+  gap:10px;
+}
+
+.row button {
+  flex:1;
 }
 </style>
 </head>
 
 <body>
 
-<h2>StockPilot</h2>
+<div class="container">
+
+<h2>📦 StockPilot</h2>
 
 <!-- LOGIN -->
-<div id="login">
+<div id="loginBox">
   <input id="user" placeholder="username">
   <input id="pin" type="password" placeholder="pin">
   <button onclick="login()">Login</button>
@@ -49,50 +69,50 @@ button {
 
 <h3>Add Item</h3>
 
-<input id="name" placeholder="name">
-<input id="fullStock" type="number" placeholder="max stock">
-<button id="addBtn">Add</button>
+<input id="name" placeholder="Item name">
+<input id="fullStock" type="number" placeholder="Max stock">
+<button id="addBtn">Add Item</button>
 
 <h3>Items</h3>
 <div id="items"></div>
 
 </div>
 
+</div>
+
 <script>
 
-/////////////////////////////////////////////////////
-// 🔥 IMPORTANT: CHANGE THIS TO YOUR RENDER URL
-/////////////////////////////////////////////////////
-
 const API = "https://stockpilot-50wv.onrender.com";
-
 const PIN = "95028";
 
-/////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////
+// LOGIN
+////////////////////////////////////////////////////
 function login() {
   const user = document.getElementById("user").value;
   const pin = document.getElementById("pin").value;
 
   if ((user === "lx13" || user === "yeti") && pin === PIN) {
-    document.getElementById("login").style.display = "none";
+    document.getElementById("loginBox").style.display = "none";
     document.getElementById("app").style.display = "block";
     load();
   } else {
-    alert("wrong login");
+    alert("Wrong login");
   }
 }
 
-/////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////
+// LOAD ITEMS
+////////////////////////////////////////////////////
 async function load() {
   const res = await fetch(API + "/items");
   const data = await res.json();
   render(data);
 }
 
-/////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////
+// RENDER
+////////////////////////////////////////////////////
 function render(items) {
   const el = document.getElementById("items");
   el.innerHTML = "";
@@ -101,22 +121,30 @@ function render(items) {
     el.innerHTML += `
       <div class="item">
         <b>${i.name}</b><br>
-        ${i.currentStock}/${i.fullStock}
-        <br><br>
+        ${i.currentStock} / ${i.fullStock}
 
-        <button onclick="update(${i.id}, 1)">+1</button>
-        <button onclick="update(${i.id}, -1)">-1</button>
-        <button onclick="del(${i.id})">delete</button>
+        <div class="row">
+          <button onclick="update(${i.id},1)">+1</button>
+          <button onclick="update(${i.id},-1)">-1</button>
+          <button onclick="del(${i.id})">Delete</button>
+        </div>
       </div>
     `;
   });
 }
 
-/////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////
+// ADD ITEM (AUTO CLEAR FIX)
+////////////////////////////////////////////////////
 document.getElementById("addBtn").addEventListener("click", async () => {
+
   const name = document.getElementById("name").value;
   const fullStock = document.getElementById("fullStock").value;
+
+  if (!name || !fullStock) {
+    alert("Fill all fields");
+    return;
+  }
 
   await fetch(API + "/items", {
     method:"POST",
@@ -127,11 +155,16 @@ document.getElementById("addBtn").addEventListener("click", async () => {
     })
   });
 
+  // ✅ CLEAR INPUTS AFTER ADD (your request)
+  document.getElementById("name").value = "";
+  document.getElementById("fullStock").value = "";
+
   load();
 });
 
-/////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////
+// UPDATE STOCK
+////////////////////////////////////////////////////
 async function update(id, delta) {
   await fetch(API + "/items/" + id, {
     method:"PATCH",
@@ -142,8 +175,9 @@ async function update(id, delta) {
   load();
 }
 
-/////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////
+// DELETE
+////////////////////////////////////////////////////
 async function del(id) {
   await fetch(API + "/items/" + id, {
     method:"DELETE"
@@ -151,8 +185,6 @@ async function del(id) {
 
   load();
 }
-
-/////////////////////////////////////////////////////
 
 </script>
 
