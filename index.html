@@ -1,92 +1,123 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>StockPilot</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b1220">
 
 <style>
 body {
-  margin: 0;
-  font-family: system-ui;
-  background: #0b1220;
-  color: white;
-  -webkit-text-size-adjust: 100%;
+    margin: 0;
+    font-family: system-ui;
+    background: #0b1220;
+    color: white;
+}
+
+.center {
+    display: flex;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+input, select {
+    padding: 10px;
+    margin: 5px;
+    width: 220px;
+    border-radius: 8px;
+    border: none;
+    font-size: 16px;
+}
+
+button {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    background: #3b82f6;
+    color: white;
+    font-size: 16px;
 }
 
 .hidden { display: none; }
 
-.container {
-  padding: 15px;
+header {
+    padding: 16px;
+    background: #111827;
+    font-weight: bold;
 }
 
-input, button {
-  font-size: 16px; /* FIX iPhone zoom */
-  padding: 12px;
-  margin: 6px 0;
-  width: 100%;
-  border-radius: 10px;
-  border: none;
-  box-sizing: border-box;
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 16px;
 }
 
-button {
-  background: #3b82f6;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
+.card {
+    background: #1e293b;
+    padding: 12px;
+    border-radius: 12px;
 }
 
 .item {
-  background: #1e293b;
-  padding: 12px;
-  margin: 10px 0;
-  border-radius: 12px;
-}
-
-.row {
-  display: flex;
-  gap: 10px;
-}
-
-.row button {
-  flex: 1;
+    margin: 10px 16px;
+    background: #1e293b;
+    padding: 12px;
+    border-radius: 12px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="container">
-
 <!-- LOGIN -->
-<div id="login">
-  <h2>🔐 Login</h2>
-  <input id="user" placeholder="username">
-  <input id="pin" type="password" placeholder="pin">
-  <button onclick="login()">Login</button>
-  <p id="error" style="color:red;"></p>
+<div id="login" class="center">
+    <h2>StockPilot Login</h2>
+
+    <select id="user">
+        <option value="lx13">lx13</option>
+        <option value="yeti">yeti</option>
+    </select>
+
+    <input id="pin" type="password" placeholder="PIN">
+
+    <button onclick="login()">Login</button>
+    <p id="error" style="color:red"></p>
 </div>
 
 <!-- APP -->
 <div id="app" class="hidden">
 
-<h2>📦 StockPilot</h2>
+<header>📦 StockPilot</header>
+
+<div class="grid">
+    <div class="card">Total <div id="total">0</div></div>
+    <div class="card">Low <div id="low">0</div></div>
+    <div class="card">Full <div id="full">0</div></div>
+    <div class="card">Fill % <div id="fill">0%</div></div>
+</div>
+
+<div style="padding:16px">
 
 <h3>Add Item</h3>
-<input id="name" placeholder="Item name">
-<input id="fullStock" type="number" placeholder="Max stock">
-<button onclick="addItem()">Add Item</button>
+
+<input id="name" placeholder="Name">
+<input id="fullStock" type="number" placeholder="Max Stock">
+
+<button onclick="addItem()">Add</button>
 
 <h3>Items</h3>
 <div id="items"></div>
 
 </div>
-
 </div>
 
 <script>
 
-/* ✅ FIXED API */
+/* ✅ IMPORTANT FIX (YOUR MAIN ISSUE) */
 const API = "https://stockpilot-50wv.onrender.com";
 const PIN = "95028";
 
@@ -104,66 +135,65 @@ function login() {
     }
 }
 
-/* LOAD ITEMS */
+/* LOAD DATA */
 async function load() {
     try {
-        const res = await fetch(API + "/items");
-        const items = await res.json();
+        const items = await (await fetch(API + "/items")).json();
+        const s = await (await fetch(API + "/summary")).json();
+
+        document.getElementById("total").innerText = s.total;
+        document.getElementById("low").innerText = s.low;
+        document.getElementById("full").innerText = s.full;
+        document.getElementById("fill").innerText = s.fillRate + "%";
+
         render(items);
     } catch (err) {
-        console.error("Load error:", err);
+        console.log("API error:", err);
     }
 }
 
-/* RENDER */
+/* RENDER ITEMS */
 function render(items) {
-    const box = document.getElementById("items");
-    box.innerHTML = "";
+    const el = document.getElementById("items");
+    el.innerHTML = "";
 
     items.forEach(i => {
-        box.innerHTML += `
+        el.innerHTML += `
         <div class="item">
-            <b>${i.name}</b><br>
-            ${i.currentStock} / ${i.fullStock}
-
-            <div class="row">
-                <button onclick="update(${i.id}, 1)">+1</button>
-                <button onclick="update(${i.id}, -1)">-1</button>
-                <button onclick="removeItem(${i.id})">Delete</button>
-            </div>
-        </div>
-        `;
+            <b>${i.name}</b> (${i.currentStock}/${i.fullStock})
+            <br><br>
+            <button onclick="update(${i.id},1)">+1</button>
+            <button onclick="update(${i.id},-1)">-1</button>
+            <button onclick="del(${i.id})">Delete</button>
+        </div>`;
     });
 }
 
-/* ADD ITEM (auto clear FIX) */
+/* ADD ITEM (FIXED: auto clear inputs) */
 async function addItem() {
-    const name = document.getElementById("name").value;
-    const fullStock = document.getElementById("fullStock").value;
-
-    if (!name || !fullStock) return alert("Fill all fields");
+    const nameInput = document.getElementById("name");
+    const stockInput = document.getElementById("fullStock");
 
     await fetch(API + "/items", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
-            name,
-            fullStock: Number(fullStock)
+            name: nameInput.value,
+            fullStock: Number(stockInput.value)
         })
     });
 
-    // ✅ CLEAR INPUTS AFTER ADD
-    document.getElementById("name").value = "";
-    document.getElementById("fullStock").value = "";
+    nameInput.value = "";
+    stockInput.value = "";
 
     load();
 }
 
-/* UPDATE STOCK */
+/* UPDATE */
 async function update(id, delta) {
     await fetch(API + "/items/" + id, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {"Content-Type": "application/json"},
         body: JSON.stringify({ delta })
     });
 
@@ -171,12 +201,14 @@ async function update(id, delta) {
 }
 
 /* DELETE */
-async function removeItem(id) {
-    await fetch(API + "/items/" + id, {
-        method: "DELETE"
-    });
-
+async function del(id) {
+    await fetch(API + "/items/" + id, { method: "DELETE" });
     load();
+}
+
+/* PWA */
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js");
 }
 
 </script>
