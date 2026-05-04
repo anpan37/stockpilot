@@ -6,47 +6,50 @@
 
 <style>
 body {
-  margin:0;
+  margin: 0;
   font-family: system-ui;
-  background:#0b1220;
-  color:white;
+  background: #0b1220;
+  color: white;
   -webkit-text-size-adjust: 100%;
 }
 
+.hidden { display: none; }
+
 .container {
-  padding:15px;
+  padding: 15px;
 }
 
 input, button {
-  font-size:16px; /* prevents iOS zoom */
-  padding:12px;
-  margin:5px 0;
-  width:100%;
-  border-radius:10px;
-  border:none;
-  box-sizing:border-box;
+  font-size: 16px; /* FIX iPhone zoom */
+  padding: 12px;
+  margin: 6px 0;
+  width: 100%;
+  border-radius: 10px;
+  border: none;
+  box-sizing: border-box;
 }
 
 button {
-  background:#3b82f6;
-  color:white;
-  font-weight:bold;
+  background: #3b82f6;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
 }
 
 .item {
-  background:#1e293b;
-  padding:12px;
-  margin:10px 0;
-  border-radius:12px;
+  background: #1e293b;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 12px;
 }
 
 .row {
-  display:flex;
-  gap:10px;
+  display: flex;
+  gap: 10px;
 }
 
 .row button {
-  flex:1;
+  flex: 1;
 }
 </style>
 </head>
@@ -55,23 +58,24 @@ button {
 
 <div class="container">
 
-<h2>📦 StockPilot</h2>
-
 <!-- LOGIN -->
-<div id="loginBox">
+<div id="login">
+  <h2>🔐 Login</h2>
   <input id="user" placeholder="username">
   <input id="pin" type="password" placeholder="pin">
   <button onclick="login()">Login</button>
+  <p id="error" style="color:red;"></p>
 </div>
 
 <!-- APP -->
-<div id="app" style="display:none">
+<div id="app" class="hidden">
+
+<h2>📦 StockPilot</h2>
 
 <h3>Add Item</h3>
-
 <input id="name" placeholder="Item name">
 <input id="fullStock" type="number" placeholder="Max stock">
-<button id="addBtn">Add Item</button>
+<button onclick="addItem()">Add Item</button>
 
 <h3>Items</h3>
 <div id="items"></div>
@@ -82,108 +86,97 @@ button {
 
 <script>
 
+/* ✅ FIXED API */
 const API = "https://stockpilot-50wv.onrender.com";
 const PIN = "95028";
 
-////////////////////////////////////////////////////
-// LOGIN
-////////////////////////////////////////////////////
+/* LOGIN */
 function login() {
-  const user = document.getElementById("user").value;
-  const pin = document.getElementById("pin").value;
+    const user = document.getElementById("user").value;
+    const pin = document.getElementById("pin").value;
 
-  if ((user === "lx13" || user === "yeti") && pin === PIN) {
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("app").style.display = "block";
-    load();
-  } else {
-    alert("Wrong login");
-  }
+    if ((user === "lx13" || user === "yeti") && pin === PIN) {
+        document.getElementById("login").classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        load();
+    } else {
+        document.getElementById("error").innerText = "Wrong login!";
+    }
 }
 
-////////////////////////////////////////////////////
-// LOAD ITEMS
-////////////////////////////////////////////////////
+/* LOAD ITEMS */
 async function load() {
-  const res = await fetch(API + "/items");
-  const data = await res.json();
-  render(data);
+    try {
+        const res = await fetch(API + "/items");
+        const items = await res.json();
+        render(items);
+    } catch (err) {
+        console.error("Load error:", err);
+    }
 }
 
-////////////////////////////////////////////////////
-// RENDER
-////////////////////////////////////////////////////
+/* RENDER */
 function render(items) {
-  const el = document.getElementById("items");
-  el.innerHTML = "";
+    const box = document.getElementById("items");
+    box.innerHTML = "";
 
-  items.forEach(i => {
-    el.innerHTML += `
-      <div class="item">
-        <b>${i.name}</b><br>
-        ${i.currentStock} / ${i.fullStock}
+    items.forEach(i => {
+        box.innerHTML += `
+        <div class="item">
+            <b>${i.name}</b><br>
+            ${i.currentStock} / ${i.fullStock}
 
-        <div class="row">
-          <button onclick="update(${i.id},1)">+1</button>
-          <button onclick="update(${i.id},-1)">-1</button>
-          <button onclick="del(${i.id})">Delete</button>
+            <div class="row">
+                <button onclick="update(${i.id}, 1)">+1</button>
+                <button onclick="update(${i.id}, -1)">-1</button>
+                <button onclick="removeItem(${i.id})">Delete</button>
+            </div>
         </div>
-      </div>
-    `;
-  });
+        `;
+    });
 }
 
-////////////////////////////////////////////////////
-// ADD ITEM (AUTO CLEAR FIX)
-////////////////////////////////////////////////////
-document.getElementById("addBtn").addEventListener("click", async () => {
+/* ADD ITEM (auto clear FIX) */
+async function addItem() {
+    const name = document.getElementById("name").value;
+    const fullStock = document.getElementById("fullStock").value;
 
-  const name = document.getElementById("name").value;
-  const fullStock = document.getElementById("fullStock").value;
+    if (!name || !fullStock) return alert("Fill all fields");
 
-  if (!name || !fullStock) {
-    alert("Fill all fields");
-    return;
-  }
+    await fetch(API + "/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            name,
+            fullStock: Number(fullStock)
+        })
+    });
 
-  await fetch(API + "/items", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      name,
-      fullStock: Number(fullStock)
-    })
-  });
+    // ✅ CLEAR INPUTS AFTER ADD
+    document.getElementById("name").value = "";
+    document.getElementById("fullStock").value = "";
 
-  // ✅ CLEAR INPUTS AFTER ADD (your request)
-  document.getElementById("name").value = "";
-  document.getElementById("fullStock").value = "";
+    load();
+}
 
-  load();
-});
-
-////////////////////////////////////////////////////
-// UPDATE STOCK
-////////////////////////////////////////////////////
+/* UPDATE STOCK */
 async function update(id, delta) {
-  await fetch(API + "/items/" + id, {
-    method:"PATCH",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ delta })
-  });
+    await fetch(API + "/items/" + id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delta })
+    });
 
-  load();
+    load();
 }
 
-////////////////////////////////////////////////////
-// DELETE
-////////////////////////////////////////////////////
-async function del(id) {
-  await fetch(API + "/items/" + id, {
-    method:"DELETE"
-  });
+/* DELETE */
+async function removeItem(id) {
+    await fetch(API + "/items/" + id, {
+        method: "DELETE"
+    });
 
-  load();
+    load();
 }
 
 </script>
